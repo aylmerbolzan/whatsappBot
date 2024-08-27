@@ -9,22 +9,28 @@ import time
 def criar_banco_de_dados():
     conn = sqlite3.connect('destinatarios.db')
     c = conn.cursor()
+    # Tabela de destinatários
     c.execute('''CREATE TABLE IF NOT EXISTS destinatarios
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   nome TEXT NOT NULL,
                   sobrenome TEXT NOT NULL,
                   telefone TEXT NOT NULL,
                   observacao TEXT)''')
+    # Tabela de mensagens
+    c.execute('''CREATE TABLE IF NOT EXISTS mensagens
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  titulo TEXT NOT NULL,
+                  corpo TEXT NOT NULL)''')
     conn.commit()
     conn.close()
 
 criar_banco_de_dados()
 
-# Função para abrir a tela de cadastro/edição
-def abrir_tela_cadastro(editar=False, destinatario_id=None):
+# Função para abrir a tela de cadastro/edição de destinatários
+def abrir_tela_cadastro_destinatario(editar=False, destinatario_id=None):
     tela_cadastro = ctk.CTkToplevel(app)
     tela_cadastro.title("Cadastrar Destinatário" if not editar else "Editar Destinatário")
-    tela_cadastro.geometry("400x450")  # Aumentei a altura para 450
+    tela_cadastro.geometry("400x450")
 
     # Campos de entrada
     label_nome = ctk.CTkLabel(tela_cadastro, text="Nome:")
@@ -88,10 +94,64 @@ def abrir_tela_cadastro(editar=False, destinatario_id=None):
     button_salvar = ctk.CTkButton(tela_cadastro, text="Salvar", command=salvar_destinatario)
     button_salvar.pack(pady=10)
 
+# Função para abrir a tela de cadastro/edição de mensagens
+def abrir_tela_cadastro_mensagem(editar=False, mensagem_id=None):
+    tela_cadastro = ctk.CTkToplevel(app)
+    tela_cadastro.title("Cadastrar Mensagem" if not editar else "Editar Mensagem")
+    tela_cadastro.geometry("400x350")
+
+    # Campos de entrada
+    label_titulo = ctk.CTkLabel(tela_cadastro, text="Título da Mensagem:")
+    label_titulo.pack(pady=5)
+    entry_titulo = ctk.CTkEntry(tela_cadastro, width=300)
+    entry_titulo.pack(pady=5)
+
+    label_corpo = ctk.CTkLabel(tela_cadastro, text="Corpo da Mensagem:")
+    label_corpo.pack(pady=5)
+    text_corpo = ctk.CTkTextbox(tela_cadastro, width=300, height=150)
+    text_corpo.pack(pady=5)
+
+    # Preencher campos se estiver editando
+    if editar and mensagem_id:
+        conn = sqlite3.connect('destinatarios.db')
+        c = conn.cursor()
+        c.execute("SELECT titulo, corpo FROM mensagens WHERE id = ?", (mensagem_id,))
+        mensagem = c.fetchone()
+        conn.close()
+        if mensagem:
+            entry_titulo.insert(0, mensagem[0])
+            text_corpo.insert("1.0", mensagem[1])
+
+    # Função para salvar ou editar mensagem
+    def salvar_mensagem():
+        titulo = entry_titulo.get()
+        corpo = text_corpo.get("1.0", "end-1c")
+
+        if titulo and corpo:
+            conn = sqlite3.connect('destinatarios.db')
+            c = conn.cursor()
+            if editar and mensagem_id:
+                c.execute("UPDATE mensagens SET titulo = ?, corpo = ? WHERE id = ?",
+                          (titulo, corpo, mensagem_id))
+            else:
+                c.execute("INSERT INTO mensagens (titulo, corpo) VALUES (?, ?)",
+                          (titulo, corpo))
+            conn.commit()
+            conn.close()
+            messagebox.showinfo("Sucesso", "Mensagem salva com sucesso!")
+            tela_cadastro.destroy()
+            carregar_mensagens()
+        else:
+            messagebox.showwarning("Erro", "Título e Corpo da Mensagem são obrigatórios!")
+
+    # Botão de salvar
+    button_salvar = ctk.CTkButton(tela_cadastro, text="Salvar", command=salvar_mensagem)
+    button_salvar.pack(pady=10)
+
 # Função para carregar destinatários no grid
 def carregar_destinatarios():
-    for row in tree.get_children():
-        tree.delete(row)
+    for row in tree_destinatarios.get_children():
+        tree_destinatarios.delete(row)
 
     conn = sqlite3.connect('destinatarios.db')
     c = conn.cursor()
@@ -100,24 +160,38 @@ def carregar_destinatarios():
     conn.close()
 
     for destinatario in destinatarios:
-        tree.insert("", "end", values=destinatario)
+        tree_destinatarios.insert("", "end", values=destinatario)
+
+# Função para carregar mensagens no grid
+def carregar_mensagens():
+    for row in tree_mensagens.get_children():
+        tree_mensagens.delete(row)
+
+    conn = sqlite3.connect('destinatarios.db')
+    c = conn.cursor()
+    c.execute("SELECT id, titulo, corpo FROM mensagens")
+    mensagens = c.fetchall()
+    conn.close()
+
+    for mensagem in mensagens:
+        tree_mensagens.insert("", "end", values=mensagem)
 
 # Função para editar destinatário
 def editar_destinatario():
-    selecionado = tree.selection()
+    selecionado = tree_destinatarios.selection()
     if not selecionado:
         messagebox.showwarning("Erro", "Nenhum destinatário selecionado!")
         return
-    destinatario_id = tree.item(selecionado[0], "values")[0]
-    abrir_tela_cadastro(editar=True, destinatario_id=destinatario_id)
+    destinatario_id = tree_destinatarios.item(selecionado[0], "values")[0]
+    abrir_tela_cadastro_destinatario(editar=True, destinatario_id=destinatario_id)
 
 # Função para excluir destinatário
 def excluir_destinatario():
-    selecionado = tree.selection()
+    selecionado = tree_destinatarios.selection()
     if not selecionado:
         messagebox.showwarning("Erro", "Nenhum destinatário selecionado!")
         return
-    destinatario_id = tree.item(selecionado[0], "values")[0]
+    destinatario_id = tree_destinatarios.item(selecionado[0], "values")[0]
 
     confirmacao = messagebox.askyesno("Confirmar", "Tem certeza que deseja excluir este destinatário?")
     if confirmacao:
@@ -128,17 +202,54 @@ def excluir_destinatario():
         conn.close()
         carregar_destinatarios()
 
+# Função para editar mensagem
+def editar_mensagem():
+    selecionado = tree_mensagens.selection()
+    if not selecionado:
+        messagebox.showwarning("Erro", "Nenhuma mensagem selecionada!")
+        return
+    mensagem_id = tree_mensagens.item(selecionado[0], "values")[0]
+    abrir_tela_cadastro_mensagem(editar=True, mensagem_id=mensagem_id)
+
+# Função para excluir mensagem
+def excluir_mensagem():
+    selecionado = tree_mensagens.selection()
+    if not selecionado:
+        messagebox.showwarning("Erro", "Nenhuma mensagem selecionada!")
+        return
+    mensagem_id = tree_mensagens.item(selecionado[0], "values")[0]
+
+    confirmacao = messagebox.askyesno("Confirmar", "Tem certeza que deseja excluir esta mensagem?")
+    if confirmacao:
+        conn = sqlite3.connect('destinatarios.db')
+        c = conn.cursor()
+        c.execute("DELETE FROM mensagens WHERE id = ?", (mensagem_id,))
+        conn.commit()
+        conn.close()
+        carregar_mensagens()
+
 # Função para enviar mensagens usando pywhatkit (automático)
 def enviar_mensagens():
-    mensagem_principal = text_mensagem.get("1.0", "end-1c")
+    selecionado = tree_mensagens.selection()
+    if not selecionado:
+        messagebox.showwarning("Erro", "Nenhuma mensagem selecionada!")
+        return
+    mensagem_id = tree_mensagens.item(selecionado[0], "values")[0]
+
+    conn = sqlite3.connect('destinatarios.db')
+    c = conn.cursor()
+    c.execute("SELECT corpo FROM mensagens WHERE id = ?", (mensagem_id,))
+    mensagem_principal = c.fetchone()[0]
+    conn.close()
+
     if not mensagem_principal:
         messagebox.showwarning("Erro", "A mensagem principal é obrigatória!")
         return
 
     # Obter destinatários selecionados
     selecionados = []
-    for item in tree.selection():
-        destinatario = tree.item(item, "values")
+    for item in tree_destinatarios.selection():
+        destinatario = tree_destinatarios.item(item, "values")
         selecionados.append(destinatario)
 
     if not selecionados:
@@ -165,52 +276,82 @@ app = ctk.CTk()
 app.title("WhatsApp Sender")
 
 # Frame para listagem de destinatários
-frame_listagem = ctk.CTkFrame(app)
-frame_listagem.pack(pady=10, padx=10, fill="both", expand=True)
+frame_destinatarios = ctk.CTkFrame(app)
+frame_destinatarios.pack(pady=10, padx=10, fill="both", expand=True)
 
-tree = ttk.Treeview(frame_listagem, columns=("ID", "Nome", "Sobrenome", "Telefone", "Observação"), show="headings")
-tree.heading("Nome", text="Nome")
-tree.heading("Sobrenome", text="Sobrenome")
-tree.heading("Telefone", text="Telefone")
-tree.heading("Observação", text="Observação")
-tree.column("ID", width=0, stretch=False)  # Oculta a coluna de ID
-tree.column("Nome", width=150)
-tree.column("Sobrenome", width=150)
-tree.column("Telefone", width=100)
-tree.column("Observação", width=200)
-tree.pack(fill="both", expand=True)
+label_destinatarios = ctk.CTkLabel(frame_destinatarios, text="Destinatários:")
+label_destinatarios.pack(pady=5)
 
-# Frame para botões (centralizado)
-frame_botoes = ctk.CTkFrame(frame_listagem)
-frame_botoes.pack(pady=10, fill="x")
+tree_destinatarios = ttk.Treeview(frame_destinatarios, columns=("ID", "Nome", "Sobrenome", "Telefone", "Observação"), show="headings")
+tree_destinatarios.heading("Nome", text="Nome")
+tree_destinatarios.heading("Sobrenome", text="Sobrenome")
+tree_destinatarios.heading("Telefone", text="Telefone")
+tree_destinatarios.heading("Observação", text="Observação")
+tree_destinatarios.column("ID", width=0, stretch=False)  # Oculta a coluna de ID
+tree_destinatarios.column("Nome", width=150)
+tree_destinatarios.column("Sobrenome", width=150)
+tree_destinatarios.column("Telefone", width=100)
+tree_destinatarios.column("Observação", width=200)
+tree_destinatarios.pack(fill="both", expand=True)
+
+# Frame para botões de destinatários (centralizado)
+frame_botoes_destinatarios = ctk.CTkFrame(frame_destinatarios)
+frame_botoes_destinatarios.pack(pady=10, fill="x")
 
 # Usar um frame interno para centralizar os botões
-frame_botoes_interno = ctk.CTkFrame(frame_botoes)
-frame_botoes_interno.pack(expand=True)
+frame_botoes_destinatarios_interno = ctk.CTkFrame(frame_botoes_destinatarios)
+frame_botoes_destinatarios_interno.pack(expand=True)
 
-button_cadastrar = ctk.CTkButton(frame_botoes_interno, text="Cadastrar", command=abrir_tela_cadastro)
-button_cadastrar.pack(side="left", padx=5)
+button_cadastrar_destinatario = ctk.CTkButton(frame_botoes_destinatarios_interno, text="Cadastrar Destinatário", command=abrir_tela_cadastro_destinatario)
+button_cadastrar_destinatario.pack(side="left", padx=5)
 
-button_editar = ctk.CTkButton(frame_botoes_interno, text="Editar", command=editar_destinatario)
-button_editar.pack(side="left", padx=5)
+button_editar_destinatario = ctk.CTkButton(frame_botoes_destinatarios_interno, text="Editar Destinatário", command=editar_destinatario)
+button_editar_destinatario.pack(side="left", padx=5)
 
-button_excluir = ctk.CTkButton(frame_botoes_interno, text="Excluir", command=excluir_destinatario)
-button_excluir.pack(side="left", padx=5)
+button_excluir_destinatario = ctk.CTkButton(frame_botoes_destinatarios_interno, text="Excluir Destinatário", command=excluir_destinatario)
+button_excluir_destinatario.pack(side="left", padx=5)
 
-# Frame para mensagem principal
-frame_mensagem = ctk.CTkFrame(app)
-frame_mensagem.pack(pady=10, padx=10, fill="x")
+# Frame para listagem de mensagens
+frame_mensagens = ctk.CTkFrame(app)
+frame_mensagens.pack(pady=10, padx=10, fill="both", expand=True)
 
-label_mensagem = ctk.CTkLabel(frame_mensagem, text="Mensagem Principal:")
-label_mensagem.pack(pady=5)
-text_mensagem = ctk.CTkTextbox(frame_mensagem, height=100)
-text_mensagem.pack(pady=5, padx=5, fill="x")
+label_mensagens = ctk.CTkLabel(frame_mensagens, text="Mensagens:")
+label_mensagens.pack(pady=5)
 
-# Botão de Enviar Mensagens
-button_enviar = ctk.CTkButton(app, text="Enviar Mensagens", command=enviar_mensagens)
+tree_mensagens = ttk.Treeview(frame_mensagens, columns=("ID", "Título", "Corpo"), show="headings")
+tree_mensagens.heading("Título", text="Título")
+tree_mensagens.heading("Corpo", text="Corpo")
+tree_mensagens.column("ID", width=0, stretch=False)  # Oculta a coluna de ID
+tree_mensagens.column("Título", width=150)
+tree_mensagens.column("Corpo", width=400)
+tree_mensagens.pack(fill="both", expand=True)
+
+# Frame para botões de mensagens (centralizado)
+frame_botoes_mensagens = ctk.CTkFrame(frame_mensagens)
+frame_botoes_mensagens.pack(pady=10, fill="x")
+
+# Usar um frame interno para centralizar os botões
+frame_botoes_mensagens_interno = ctk.CTkFrame(frame_botoes_mensagens)
+frame_botoes_mensagens_interno.pack(expand=True)
+
+button_cadastrar_mensagem = ctk.CTkButton(frame_botoes_mensagens_interno, text="Cadastrar Mensagem", command=abrir_tela_cadastro_mensagem)
+button_cadastrar_mensagem.pack(side="left", padx=5)
+
+button_editar_mensagem = ctk.CTkButton(frame_botoes_mensagens_interno, text="Editar Mensagem", command=editar_mensagem)
+button_editar_mensagem.pack(side="left", padx=5)
+
+button_excluir_mensagem = ctk.CTkButton(frame_botoes_mensagens_interno, text="Excluir Mensagem", command=excluir_mensagem)
+button_excluir_mensagem.pack(side="left", padx=5)
+
+# Frame para enviar mensagens
+frame_enviar = ctk.CTkFrame(app)
+frame_enviar.pack(pady=10, padx=10, fill="x")
+
+button_enviar = ctk.CTkButton(frame_enviar, text="Enviar Mensagens", command=enviar_mensagens)
 button_enviar.pack(pady=10)
 
-# Carregar destinatários ao iniciar
+# Carregar destinatários e mensagens ao iniciar
 carregar_destinatarios()
+carregar_mensagens()
 
 app.mainloop()
