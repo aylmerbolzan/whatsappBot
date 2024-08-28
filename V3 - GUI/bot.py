@@ -1,9 +1,9 @@
 import customtkinter as ctk
-from tkinter import messagebox, ttk
+from tkinter import messagebox, ttk, filedialog
 import sqlite3
-import pyautogui
 import pywhatkit as kit
 import time
+import pyautogui  # Importação adicionada
 
 # Função para criar o banco de dados
 def criar_banco_de_dados():
@@ -20,7 +20,8 @@ def criar_banco_de_dados():
     c.execute('''CREATE TABLE IF NOT EXISTS mensagens
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   titulo TEXT NOT NULL,
-                  corpo TEXT NOT NULL)''')
+                  corpo TEXT NOT NULL,
+                  anexo TEXT)''')  # Novo campo para o caminho do anexo
     conn.commit()
     conn.close()
 
@@ -98,7 +99,7 @@ def abrir_tela_cadastro_destinatario(editar=False, destinatario_id=None):
 def abrir_tela_cadastro_mensagem(editar=False, mensagem_id=None):
     tela_cadastro = ctk.CTkToplevel(app)
     tela_cadastro.title("Cadastrar Mensagem" if not editar else "Editar Mensagem")
-    tela_cadastro.geometry("400x350")
+    tela_cadastro.geometry("400x400")
 
     # Campos de entrada
     label_titulo = ctk.CTkLabel(tela_cadastro, text="Título da Mensagem:")
@@ -108,34 +109,44 @@ def abrir_tela_cadastro_mensagem(editar=False, mensagem_id=None):
 
     label_corpo = ctk.CTkLabel(tela_cadastro, text="Corpo da Mensagem:")
     label_corpo.pack(pady=5)
-    text_corpo = ctk.CTkTextbox(tela_cadastro, width=300, height=150)
+    text_corpo = ctk.CTkTextbox(tela_cadastro, width=300, height=100)
     text_corpo.pack(pady=5)
+
+    # Campo para anexo
+    label_anexo = ctk.CTkLabel(tela_cadastro, text="Anexo (apenas imagens):")
+    label_anexo.pack(pady=5)
+    entry_anexo = ctk.CTkEntry(tela_cadastro, width=300)
+    entry_anexo.pack(pady=5)
+    button_procurar_anexo = ctk.CTkButton(tela_cadastro, text="Procurar Anexo", command=lambda: selecionar_anexo(entry_anexo))
+    button_procurar_anexo.pack(pady=5)
 
     # Preencher campos se estiver editando
     if editar and mensagem_id:
         conn = sqlite3.connect('destinatarios.db')
         c = conn.cursor()
-        c.execute("SELECT titulo, corpo FROM mensagens WHERE id = ?", (mensagem_id,))
+        c.execute("SELECT titulo, corpo, anexo FROM mensagens WHERE id = ?", (mensagem_id,))
         mensagem = c.fetchone()
         conn.close()
         if mensagem:
             entry_titulo.insert(0, mensagem[0])
             text_corpo.insert("1.0", mensagem[1])
+            entry_anexo.insert(0, mensagem[2])
 
     # Função para salvar ou editar mensagem
     def salvar_mensagem():
         titulo = entry_titulo.get()
         corpo = text_corpo.get("1.0", "end-1c")
+        anexo = entry_anexo.get()
 
         if titulo and corpo:
             conn = sqlite3.connect('destinatarios.db')
             c = conn.cursor()
             if editar and mensagem_id:
-                c.execute("UPDATE mensagens SET titulo = ?, corpo = ? WHERE id = ?",
-                          (titulo, corpo, mensagem_id))
+                c.execute("UPDATE mensagens SET titulo = ?, corpo = ?, anexo = ? WHERE id = ?",
+                          (titulo, corpo, anexo, mensagem_id))
             else:
-                c.execute("INSERT INTO mensagens (titulo, corpo) VALUES (?, ?)",
-                          (titulo, corpo))
+                c.execute("INSERT INTO mensagens (titulo, corpo, anexo) VALUES (?, ?, ?)",
+                          (titulo, corpo, anexo))
             conn.commit()
             conn.close()
             messagebox.showinfo("Sucesso", "Mensagem salva com sucesso!")
@@ -147,6 +158,16 @@ def abrir_tela_cadastro_mensagem(editar=False, mensagem_id=None):
     # Botão de salvar
     button_salvar = ctk.CTkButton(tela_cadastro, text="Salvar", command=salvar_mensagem)
     button_salvar.pack(pady=10)
+
+# Função para selecionar anexo (apenas imagens)
+def selecionar_anexo(entry_anexo):
+    arquivo = filedialog.askopenfilename(
+        title="Selecione uma imagem",
+        filetypes=[("Imagens", "*.jpg *.jpeg *.png")]
+    )
+    if arquivo:
+        entry_anexo.delete(0, "end")
+        entry_anexo.insert(0, arquivo)
 
 # Função para carregar destinatários no grid
 def carregar_destinatarios():
@@ -169,7 +190,7 @@ def carregar_mensagens():
 
     conn = sqlite3.connect('destinatarios.db')
     c = conn.cursor()
-    c.execute("SELECT id, titulo, corpo FROM mensagens")
+    c.execute("SELECT id, titulo, corpo, anexo FROM mensagens")
     mensagens = c.fetchall()
     conn.close()
 
@@ -238,9 +259,16 @@ def enviar_mensagens():
 
     conn = sqlite3.connect('destinatarios.db')
     c = conn.cursor()
-    c.execute("SELECT corpo FROM mensagens WHERE id = ?", (mensagem_id,))
-    mensagem_principal = c.fetchone()[0]
+    c.execute("SELECT corpo, anexo FROM mensagens WHERE id = ?", (mensagem_id,))
+    mensagem = c.fetchone()
     conn.close()
+
+    if not mensagem:
+        messagebox.showwarning("Erro", "Mensagem não encontrada!")
+        return
+
+    mensagem_principal = mensagem[0]
+    anexo = mensagem[1]
 
     if not mensagem_principal:
         messagebox.showwarning("Erro", "A mensagem principal é obrigatória!")
@@ -264,10 +292,18 @@ def enviar_mensagens():
 
         # Envia a mensagem usando pywhatkit
         try:
-            kit.sendwhatmsg_instantly(telefone, mensagem_final, wait_time=25)
+            if anexo and anexo.lower().endswith(('.jpg', '.jpeg', '.png')):  # Verifica se o anexo é uma imagem
+                kit.sendwhats_image(
+                    receiver=telefone,
+                    img_path=anexo,
+                    caption=mensagem_final,
+                    wait_time=25
+                )
+            else:  # Se não houver anexo ou não for uma imagem
+                kit.sendwhatmsg_instantly(telefone, mensagem_final, wait_time=25)
             print(f"Mensagem enviada para {nome} ({telefone})")  # Log no console
             time.sleep(3)  # Aguarda 3 segundos antes de enviar a próxima mensagem
-            pyautogui.hotkey('ctrl', 'w')
+            pyautogui.hotkey('ctrl', 'w')  # Fecha a aba do navegador
         except Exception as e:
             print(f"Erro ao enviar mensagem para {nome}: {e}")  # Log de erro no console
 
@@ -318,12 +354,14 @@ frame_mensagens.pack(pady=10, padx=10, fill="both", expand=True)
 label_mensagens = ctk.CTkLabel(frame_mensagens, text="Mensagens:")
 label_mensagens.pack(pady=5)
 
-tree_mensagens = ttk.Treeview(frame_mensagens, columns=("ID", "Título", "Corpo"), show="headings")
+tree_mensagens = ttk.Treeview(frame_mensagens, columns=("ID", "Título", "Corpo", "Anexo"), show="headings")
 tree_mensagens.heading("Título", text="Título")
 tree_mensagens.heading("Corpo", text="Corpo")
+tree_mensagens.heading("Anexo", text="Anexo")
 tree_mensagens.column("ID", width=0, stretch=False)  # Oculta a coluna de ID
 tree_mensagens.column("Título", width=150)
-tree_mensagens.column("Corpo", width=400)
+tree_mensagens.column("Corpo", width=300)
+tree_mensagens.column("Anexo", width=200)
 tree_mensagens.pack(fill="both", expand=True)
 
 # Frame para botões de mensagens (centralizado)
