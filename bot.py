@@ -5,6 +5,9 @@ from time import sleep
 import pyautogui
 import sys
 
+# Definir o caminho do Chrome
+chrome_path = "C:/Program Files/Google/Chrome/Application/chrome.exe %s"
+
 # Carregar a planilha
 planilha = openpyxl.load_workbook('Contatos.xlsx')
 pagina = planilha['Sheet1']
@@ -19,18 +22,21 @@ for linha in pagina.iter_rows(min_row=2):
         sys.exit()
 
     mensagem = (
-        f"👋 Olá {nome},\n\n"
-        "Seja bem-vindo ao grupo do *Ministério Hero da Lagoinha Domingos Martins*! 🔥\n\n"
-        "Aqui, buscamos viver o propósito que Deus tem para cada homem, fortalecendo nossa fé, caráter e compromisso com a palavra de Deus. "
-        "Nosso desejo é que sejamos verdadeiros heróis para nossas famílias e referências de Cristo na sociedade.\n\n"
-        "📅 Nosso próximo culto será dia *02 de Novembro*, às 18hs – será uma alegria tê-lo conosco!\n"
-        "📍 Segue a nossa localização: https://maps.app.goo.gl/bEukr5s5mx2gZiTh7\n\n"
-        "Que Deus abençoe sua vida! 🙌"
+        f"🎉 *Parabéns, {nome}!* 🎉\n\n"
+        "Estamos em Janeiro, o SEU mês! 🥳 Sabia que aqui na Amoana a gente AMA celebrar aniversários? 🎂✨\n\n"
+        "Então, pra deixar seu mês ainda mais especial, preparamos um presentinho pra você: *10% de desconto* em todas as suas compras "
+        "*válido por 30 dias*! 🛍️💃\n\n"
+        "💖 É só usar o cupom: *FELIZANIVER10* na hora da compra e aproveitar! Porque aniversário bom é aquele que vem com muito estilo, né?\n\n"
+        "Corre pra garantir suas peças favoritas e comemorar seu novo ciclo cheia de charme! 🫶\n\n"
+        "Qualquer dúvida, é só chamar! Vamos adorar te ajudar.\n\n"
+        "Com carinho,\n"
+        "_Anne da Amoana_ 🌸"
     )
 
     try:
         link_mensagem_whatsapp = f'https://web.whatsapp.com/send?phone=55{telefone}&text={quote(mensagem)}'
-        webbrowser.open(link_mensagem_whatsapp)
+        chrome = webbrowser.get(chrome_path)  # Define o Chrome como navegador
+        chrome.open(link_mensagem_whatsapp)
         sleep(25)
 
         pyautogui.press('tab')
